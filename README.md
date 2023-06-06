@@ -8,7 +8,7 @@ Los datos de conexión se encuentran variabilizados y se ingresan desde el .py "
 
 ----
 
-Para inserción de datos bulk es posible utilizar el método COPY - para ello es necesario tener instalado psicopg2
+Para inserción de datos bulk es posible utilizar el método COPY - para ello es necesario tener instalado psicopg2 e StringIO
 
 
 # Defino el nombre de la tabla
