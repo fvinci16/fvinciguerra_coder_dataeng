@@ -20,12 +20,28 @@ connection = redshift_connector.connect(
 # selecciono mi esquema en la base de datos
 my_schema = "fvinciguerra_coderhouse"
 
+# Crear tabla si no existe
+create_table_query = """
+    CREATE TABLE IF NOT EXISTS {}.stock_data (
+        Date DATE,
+        "Open" DECIMAL,
+        High DECIMAL,
+        Low DECIMAL,
+        Close DECIMAL,
+        Volume DECIMAL,
+        Dividends DECIMAL,
+        Stock_Splits DECIMAL
+    )
+""".format(my_schema)
+
+cursor = connection.cursor()
+cursor.execute(create_table_query)
+
 # Trunco la tabla "stock_data" para actualizar la información
 truncate_table_query = """
     TRUNCATE TABLE {}.stock_data
 """.format(my_schema)
 
-cursor = connection.cursor()
 cursor.execute(truncate_table_query)
 
 # Inserto los valores
@@ -51,4 +67,4 @@ for index, row in hist.iterrows():
 connection.commit()
 connection.close()
 
-print("El insert a la tabla 'stock_data' se completo exitosamente.")
+print("El insert a la tabla 'stock_data' se completó exitosamente.")
