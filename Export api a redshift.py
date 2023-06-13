@@ -1,14 +1,31 @@
 import yfinance as yf
 import redshift_connector
+import pandas as pd
 from Parametros_conexión import host, database, port, user, password
 
-# Tomo la data historica de google
+# Tomo la data historica de Google (1 Año)
 goo = yf.Ticker('GOOG')
 hist = goo.history(period="1y")
-hist['Date'] = hist.index
-hist = hist.reset_index(drop=True)
 
-# Conecto a redshift - Invoco variables
+# Reseteo de index - Es necesario para el calculo de Month Volume
+hist = hist.reset_index()
+
+# Convierto 'Date' a Datetype para luego calcular el volumen por mes
+hist['Date'] = pd.to_datetime(hist['Date'])
+
+# Si stock_splits no tiene dato, le pongo un "0".
+if 'Stock_Splits' not in hist.columns:
+    hist['Stock_Splits'] = 0
+else:
+    hist['Stock_Splits'] = hist['Stock_Splits'].fillna(0)
+
+# Remuevo duplicados si es que hay
+hist = hist.drop_duplicates(subset=['Date'], keep='last')
+
+# Calculo de volumen por mes
+hist['MonthVolume'] = hist.groupby(pd.Grouper(key='Date', freq='M'))['Volume'].transform('sum')
+
+# Conexión a Redshift
 connection = redshift_connector.connect(
     host=host,
     database=database,
@@ -17,12 +34,12 @@ connection = redshift_connector.connect(
     password=password
 )
 
-# selecciono mi esquema en la base de datos
+# Seteo mi esquema
 my_schema = "fvinciguerra_coderhouse"
 
-# Crear tabla si no existe
-create_table_query = """
-    CREATE TABLE IF NOT EXISTS {}.stock_data (
+# Creo la tabla si no existe
+create_table_query = f"""
+    CREATE TABLE IF NOT EXISTS {my_schema}.stock_data (
         Date DATE,
         "Open" DECIMAL,
         High DECIMAL,
@@ -30,41 +47,35 @@ create_table_query = """
         Close DECIMAL,
         Volume DECIMAL,
         Dividends DECIMAL,
-        Stock_Splits DECIMAL
+        Stock_Splits DECIMAL,
+        MonthVolume DECIMAL(30, 2)
     )
-""".format(my_schema)
+"""
 
 cursor = connection.cursor()
 cursor.execute(create_table_query)
 
-# Trunco la tabla "stock_data" para actualizar la información
-truncate_table_query = """
-    TRUNCATE TABLE {}.stock_data
-""".format(my_schema)
-
+# Trunco "stock_data" para hacer un update de la info
+truncate_table_query = f"""
+    TRUNCATE TABLE {my_schema}.stock_data
+"""
 cursor.execute(truncate_table_query)
 
-# Inserto los valores
-insert_query = """
-    INSERT INTO {}.stock_data (Date, "Open", High, Low, Close, Volume, Dividends, Stock_Splits)
-    VALUES (TO_DATE(%s, 'YYYY-MM-DD'), %s, %s, %s, %s, %s, %s, %s)
-""".format(my_schema)
+# Insert de los valores
+insert_query = f"""
+    INSERT INTO {my_schema}.stock_data
+    (Date, "Open", High, Low, Close, Volume, Dividends, Stock_Splits, MonthVolume)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
 
-for index, row in hist.iterrows():
-    values = (
-        row['Date'].strftime('%Y-%m-%d'),
-        row['Open'],
-        row['High'],
-        row['Low'],
-        row['Close'],
-        row['Volume'],
-        row['Dividends'],
-        row['Stock Splits']
-    )
-    cursor.execute(insert_query, values)
+values = hist[['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits', 'MonthVolume']].values
+
+with connection.cursor() as cursor:
+    cursor.executemany(insert_query, values)
 
 # Commit y cierre de conexión
 connection.commit()
 connection.close()
 
-print("El insert a la tabla 'stock_data' se completó exitosamente.")
+# Print para chequear status
+print("El insert de 'stock_data' se completó exitosamente")
