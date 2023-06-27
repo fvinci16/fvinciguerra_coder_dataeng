@@ -48,8 +48,10 @@ create_table_query = f"""
         Volume DECIMAL,
         Dividends DECIMAL,
         Stock_Splits DECIMAL,
-        MonthVolume DECIMAL(30, 2)
+        MonthVolume DECIMAL(30, 2),
+        Source VARCHAR(50)
     )
+    SORTKEY (Date)
 """
 
 cursor = connection.cursor()
@@ -64,11 +66,19 @@ cursor.execute(truncate_table_query)
 # Insert de los valores
 insert_query = f"""
     INSERT INTO {my_schema}.stock_data
-    (Date, "Open", High, Low, Close, Volume, Dividends, Stock_Splits, MonthVolume)
-    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    (Date, "Open", High, Low, Close, Volume, Dividends, Stock_Splits, MonthVolume, Source)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+# Modificar la tabla para definir Volume como DISTKEY
+alter_table_query = f"""
+    ALTER TABLE {my_schema}.stock_data
+    DISTKEY (Montholume)
 """
 
-values = hist[['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits', 'MonthVolume']].values
+# Se agrega columna 'Source'  con el valor 'Google' para definir origen de los datos
+hist['Source'] = 'Google'
+
+values = hist[['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Dividends', 'Stock_Splits', 'MonthVolume', 'Source']].values
 
 with connection.cursor() as cursor:
     cursor.executemany(insert_query, values)
